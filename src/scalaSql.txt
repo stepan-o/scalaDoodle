@@ -1,0 +1,57 @@
+spark-shell
+
+// Simple SQL queries using Scala in Spark shell
+
+sql("use mie_soskin").show()
+
+sql("show tables").show()
+
+sql("select * from game limit 10").show()
+
+sql("select * from game").count()
+
+sql("select * from game").take(1)
+
+sql("select * from game limit 10").collect()
+
+val my_data_csv = spark.sqlContext.read\
+					.format("csv")\
+					.option("header", "true")\
+					.option("inferSchema", "true")
+					.load("data/game.csv")
+
+val my_data = sql("select * from game")
+
+val df_total_goals = df.withColumn("total_goals", col("home_goals") + col("away_goals"))
+
+val df_2seasons = df_total_goals.filter($"season"==="20122013" or $"season"==="20132014")
+
+val seasons = df_2seasons.select(df_2seasons("season")).distinct
+
+/* ------------ window function --------------*/
+// import dependencies
+import org.apache.spark.sql.expressions.Window
+
+// load data
+val df = spark.sqlContext.read.format("csv").option("header", "true").option("inferSchema", "true").load("data/nhl_games_dataset/game.csv")
+
+// add the column with total goals
+val df_total_goals = df.withColumn("total_goals", col("home_goals") + col("away_goals"))
+
+// define a window
+val partitionWindow = Window.partitionBy($"season")
+
+// define a tranformation that needs to be applied within a window
+val df_total_goal_avg =  df_total_goals.select($"*", avg("total_goals") over partitionWindow as "avg_total_goals_per_season")
+val df_total_goal_minavg =  df_total_goal_avg.select($"*", min("total_goals") over partitionWindow as "min_total_goals_per_season")
+val df_total_goal_minmaxavg =  df_total_goal_minavg.select($"*", max("total_goals") over partitionWindow as "max_total_goals_per_season")
+
+// difference between game total goals and season average
+val df_tot_avg_diff = df_total_goal_minmaxavg.withColumn("total_goals_minus_avg", col("total_goals") - col("avg_total_goals_per_season"))
+
+// filter games at TD Garden in seasons 2012-2014
+val df_1214td = df.filter($"season"==="20122013" or $"season"==="20132014").filter($"venue"==="TD Garden")
+// load a data frame with team names
+val df_teamnames = df_team_info.join(df_1214td, df_team_info.col("team_id") === df_1214td.col("away_team_id")).                       select(df_team_info.col("teamName"))
+// how many unique teams played as away at TD Garden in 2012-2014
+val unique_teamnames = df_teamnames.select("teamName").distinct.count()
